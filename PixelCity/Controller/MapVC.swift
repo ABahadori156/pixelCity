@@ -28,8 +28,8 @@ class MapVC: UIViewController, UIGestureRecognizerDelegate {
     var flowLayout = UICollectionViewFlowLayout()
     var collectionView: UICollectionView? //needs UICollectionViewFlowLayOut too
 
-    var imgUrlArray = [String]()
-    
+    var imageUrlArray = [String]()
+    var imageArray = [UIImage]()
     
     var screenSize = UIScreen.main.bounds
     
@@ -63,10 +63,12 @@ class MapVC: UIViewController, UIGestureRecognizerDelegate {
     }
     
     @objc func animateViewDown() {
+        cancelAllSessions()
         pullUpViewHeightConstraint.constant = 0
         UIView.animate(withDuration: 0.4) {
             self.view.layoutIfNeeded()
         }
+        
     }
     
     func addSpinner() {
@@ -88,7 +90,7 @@ class MapVC: UIViewController, UIGestureRecognizerDelegate {
     func addProgressLbl() {
         progressLbl = UILabel()
         progressLbl?.frame = CGRect(x: (screenSize.width / 2) - 100, y: 175, width: 200, height: 40)
-        progressLbl?.font = UIFont(name: "Avenir Next", size: 18)
+        progressLbl?.font = UIFont(name: "Avenir Next", size: 14)
         progressLbl?.textColor = #colorLiteral(red: 0.2549019754, green: 0.2745098174, blue: 0.3019607961, alpha: 1)
         progressLbl?.textAlignment = .center
         collectionView?.addSubview(progressLbl!)
@@ -116,10 +118,43 @@ class MapVC: UIViewController, UIGestureRecognizerDelegate {
 
     
     func retrieveUrls(forAnnotation annotation: DroppablePin, handler: @escaping (_ status: Bool)-> ()){
-        imgUrlArray = []
+        imageUrlArray = []
         Alamofire.request(flickrUrl(forApiKey: apiKey, withAnnotation: annotation, andNumberOfPhotos: 40)).responseJSON { (response) in
-            print(response)
+            guard let json = response.result.value as? Dictionary<String, AnyObject> else { return }
+            let photosDict = json["photos"] as! Dictionary<String, AnyObject>
+            let photosDictArray = photosDict["photo"] as! [Dictionary<String, AnyObject>]
+            
+            for photo in photosDictArray {
+                let postUrl = "https://farm\(photo["farm"]!).staticflickr.com/\(photo["server"]!)/\(photo["id"]!)_\(photo["secret"]!).jpg"
+                self.imageUrlArray.append(postUrl)
+            }
             handler(true)
+        }
+    }
+    
+    func retrieveImages(handler: @escaping(_ status: Bool) -> ()) {
+        imageArray = []
+        
+        for url in imageUrlArray {
+            Alamofire.request(url).responseImage { (response) in
+                guard let image = response.result.value else { return }
+                self.imageArray.append(image)
+                self.progressLbl?.text = "\(self.imageArray.count)/40 IMAGES DOWNLOADED"
+                
+                if self.imageArray.count == self.imageUrlArray.count {
+                    handler(true) //this is how we know we're done
+                }
+            }
+        }
+    }
+    
+    func cancelAllSessions() {
+        Alamofire.SessionManager.default.session.getTasksWithCompletionHandler { (sessionDataTask, uploadData, downloadData) in
+            sessionDataTask.forEach({ $0.cancel() })
+            
+            // $0 is a placeholder. SessionDataTask is an array and we can use the $0 as a placeholder for the value. It's a closure that's doing a for-in loop
+            downloadData.forEach({ $0.cancel()})
+           
         }
     }
 }
@@ -162,6 +197,7 @@ extension MapVC: MKMapViewDelegate {
         removePin()
         removeSpinner()
         removeProgressLbl()
+        cancelAllSessions()
         
         animateViewUp()
         addSwipe()
@@ -173,8 +209,17 @@ extension MapVC: MKMapViewDelegate {
         let coordinateRegion = MKCoordinateRegion(center: touchCoordinate, latitudinalMeters: regionRadius * 2.0, longitudinalMeters: regionRadius * 2.0)
         mapView.setRegion(coordinateRegion, animated: true)
       
-        retrieveUrls(forAnnotation: annotation) { (true) in
-            
+        retrieveUrls(forAnnotation: annotation) { (finished) in
+            if finished == true {
+                self.retrieveImages(handler: { (finished) in
+                    if finished {
+                        self.removeSpinner()
+                        self.removeProgressLbl()
+                        // reload the collectionView with all the images we just downloaded
+                        
+                    }
+                })
+            }
         }
     }
 }
