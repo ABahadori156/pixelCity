@@ -28,6 +28,9 @@ class MapVC: UIViewController, UIGestureRecognizerDelegate {
     var flowLayout = UICollectionViewFlowLayout()
     var collectionView: UICollectionView? //needs UICollectionViewFlowLayOut too
 
+    var imgUrlArray = [String]()
+    
+    
     var screenSize = UIScreen.main.bounds
     
     override func viewDidLoad() {
@@ -111,8 +114,21 @@ class MapVC: UIViewController, UIGestureRecognizerDelegate {
         }
     }
 
+    
+    func retrieveUrls(forAnnotation annotation: DroppablePin, handler: @escaping (_ status: Bool)-> ()){
+        imgUrlArray = []
+        Alamofire.request(flickrUrl(forApiKey: apiKey, withAnnotation: annotation, andNumberOfPhotos: 40)).responseJSON { (response) in
+            print(response)
+            handler(true)
+        }
+    }
 }
 
+/*
+ **
+ EXTENSIONS
+ ***
+ */
 extension MapVC: MKMapViewDelegate {
     func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
         if annotation is MKUserLocation {
@@ -132,12 +148,17 @@ extension MapVC: MKMapViewDelegate {
         mapView.setRegion(coordinateRegion, animated: true)
     }
     
+    func removePin() {
+        for annotation in mapView.annotations {
+            mapView.removeAnnotation(annotation)
+        }
+    }
+    
     @objc func dropPin(sender: UITapGestureRecognizer) {
         let touchPoint = sender.location(in: mapView)
-        print(touchPoint)
         let touchCoordinate = mapView.convert(touchPoint, toCoordinateFrom: mapView)
-        
         let annotation = DroppablePin.init(coordinate: touchCoordinate, identifier: "droppablePin")
+        
         removePin()
         removeSpinner()
         removeProgressLbl()
@@ -151,12 +172,9 @@ extension MapVC: MKMapViewDelegate {
         
         let coordinateRegion = MKCoordinateRegion(center: touchCoordinate, latitudinalMeters: regionRadius * 2.0, longitudinalMeters: regionRadius * 2.0)
         mapView.setRegion(coordinateRegion, animated: true)
-        print(flickrUrl(forApiKey: apiKey, withAnnotation: annotation, andNumberOfPhotos: 40))
-    }
-    
-    func removePin() {
-        for annotation in mapView.annotations {
-            mapView.removeAnnotation(annotation)
+      
+        retrieveUrls(forAnnotation: annotation) { (true) in
+            
         }
     }
 }
@@ -169,23 +187,17 @@ extension MapVC: CLLocationManagerDelegate {
             return
         }
     }
-    
     func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
         centerMapOnUserLocation()
     }
-    
-    
-    
-    }
+}
 
 extension MapVC: UICollectionViewDelegate, UICollectionViewDataSource {
-    // MARK: UICollectionViewDataSource
     
     func numberOfSections(in collectionView: UICollectionView) -> Int {
         // #warning Incomplete implementation, return the number of sections
         return 1
     }
-    
     
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
         // number of items
@@ -197,7 +209,6 @@ extension MapVC: UICollectionViewDelegate, UICollectionViewDataSource {
         // Configure the cell
         return cell!
     }
-    
 }
 
 
