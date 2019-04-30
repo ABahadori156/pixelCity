@@ -12,6 +12,7 @@ import AlamofireImage
 import MapKit
 import CoreLocation
 
+
 class MapVC: UIViewController, UIGestureRecognizerDelegate {
     @IBOutlet weak var pullUpViewHeightConstraint: NSLayoutConstraint!
     @IBOutlet weak var mapView: MKMapView!
@@ -45,7 +46,7 @@ class MapVC: UIViewController, UIGestureRecognizerDelegate {
         collectionView?.delegate = self
         collectionView?.dataSource = self
         collectionView?.backgroundColor = #colorLiteral(red: 1, green: 1, blue: 1, alpha: 1)
-        
+        registerForPreviewing(with: self, sourceView: collectionView!)
         pullUpView.addSubview(collectionView!)
     }
     
@@ -102,12 +103,12 @@ class MapVC: UIViewController, UIGestureRecognizerDelegate {
             progressLbl?.removeFromSuperview()
         }
     }
+    
     func animateViewUp() {
         pullUpViewHeightConstraint.constant = 300
         UIView.animate(withDuration: 0.4) {
             self.view.layoutIfNeeded()
         }
-        
     }
     
     @IBAction func centerMapBtnPressed(_ sender: UIButton) {
@@ -148,12 +149,11 @@ class MapVC: UIViewController, UIGestureRecognizerDelegate {
     func cancelAllSessions() {
         Alamofire.SessionManager.default.session.getTasksWithCompletionHandler { (sessionDataTask, uploadData, downloadData) in
             sessionDataTask.forEach({ $0.cancel() })
-            
             // $0 is a placeholder. SessionDataTask is an array and we can use the $0 as a placeholder for the value. It's a closure that's doing a for-in loop
             downloadData.forEach({ $0.cancel()})
-           
         }
     }
+    
 }
 
 /*
@@ -225,6 +225,8 @@ extension MapVC: MKMapViewDelegate {
             }
         }
     }
+    
+    
 }
 
 extension MapVC: CLLocationManagerDelegate {
@@ -276,6 +278,32 @@ extension MapVC: UICollectionViewDelegate, UICollectionViewDataSource {
         guard let popVC = storyboard?.instantiateViewController(withIdentifier: "popVC") as? PopVC else { return }
         popVC.initData(forImage: imageArray[indexPath.row])
         present(popVC, animated: true, completion: nil)
+    }
+}
+
+// Here we are conforming to the UIViewControllerPreviewingDelegate.
+extension MapVC: UIViewControllerPreviewingDelegate {
+    // These are part of previewing context and of course for 3D touch, it needs to know the context of what you're trying to present,
+    func previewingContext(_ previewingContext: UIViewControllerPreviewing, viewControllerForLocation location: CGPoint) -> UIViewController? {
+        // Where we are pressing on our cell so that it knows where to animate from. create a context to hold the indexPath and a cell from that indexpath so we can access the photo value, the image from that cell
+        guard let indexPath = collectionView?.indexPathForItem(at: location), let cell = collectionView?.cellForItem(at: indexPath) else { return nil }
+        
+        //Create an instance of PopVC cause that will be showing up. When you tap all the way through, this will show
+        
+        guard let popVC = storyboard?.instantiateViewController(withIdentifier: "popVC") as? PopVC else { return nil }
+        
+        popVC.initData(forImage: imageArray[indexPath.row])
+        
+        // We're giong to setup the size that is previewed when e push on the view controller. The sourceRect is a rectangle that will zoom up as the preview
+        previewingContext.sourceRect = cell.contentView.frame
+        
+        return popVC
+    }
+    
+    // This is the peak part of the 3D touch function where you push a little bit and see a peek of what you're looking at.
+    func previewingContext(_ previewingContext: UIViewControllerPreviewing, commit viewControllerToCommit: UIViewController) {
+        //Tell it which view controller for it to commit
+        show(viewControllerToCommit, sender: self)
     }
 }
 
